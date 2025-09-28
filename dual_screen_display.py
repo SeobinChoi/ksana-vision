@@ -33,11 +33,15 @@ class DualScreenDisplay:
         self.window_width = window_width or self.WINDOW_WIDTH
         self.window_height = window_height or self.WINDOW_HEIGHT
         self.camera_window = "Camera Feed"
-        self.text_window = "Generated Captions"
+        self.text_windows = ["Text Window 1", "Text Window 2"]  # 여러 텍스트 창
         
-        # Text storage
-        self.captions: List[str] = []  # List of caption strings only
+        # Text storage - 두 개의 창을 위한 캡션 저장
+        self.window1_captions: List[str] = []  # Text Window 1 캡션들
+        self.window2_captions: List[str] = []  # Text Window 2 캡션들
         self.max_captions = self.MAX_CAPTIONS
+        
+        # Window management
+        self.window_capacity = 0  # 한 창당 최대 캡션 수
         
         # Font setup
         self.font_path = self.FONT_PATH
@@ -53,18 +57,20 @@ class DualScreenDisplay:
         self._create_windows()
         
     def _create_windows(self):
-        """Create the dual windows"""
+        """Create multiple windows (camera + text windows)"""
         # Create camera window
         cv2.namedWindow(self.camera_window, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(self.camera_window, self.window_width, self.window_height)
         
-        # Create text window
-        cv2.namedWindow(self.text_window, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(self.text_window, self.window_width, self.window_height)
+        # Create text windows
+        for i, window_name in enumerate(self.text_windows):
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(window_name, self.window_width, self.window_height)
         
-        # Position windows side by side
-        cv2.moveWindow(self.camera_window, 100, 100)
-        cv2.moveWindow(self.text_window, self.window_width + 150, 100)
+        # Position windows
+        cv2.moveWindow(self.camera_window, 100, 100)  # 카메라 창 위치
+        cv2.moveWindow(self.text_windows[0], self.window_width + 150, 100)  # 첫 번째 텍스트 창
+        cv2.moveWindow(self.text_windows[1], self.window_width + 150, self.window_height + 200)  # 두 번째 텍스트 창
     
     def _load_font(self):
         """Load the custom font"""
@@ -116,22 +122,57 @@ class DualScreenDisplay:
         cv2.imshow(self.camera_window, display_frame)
         
     def add_caption(self, caption: str):
-        """Add a new caption to the text display"""
-        self.captions.append(caption)
+        """Add a new caption to Window 1, overflow goes to Window 2"""
+        # Calculate window capacity if not done yet
+        if self.window_capacity == 0:
+            self._calculate_window_capacity()
         
-        # Keep only the latest captions
-        if len(self.captions) > self.max_captions:
-            self.captions.pop(0)
+        # Add new caption to Window 1 (right side)
+        self.window1_captions.append(caption)
+        
+        # If Window 1 is full, move oldest caption to Window 2
+        if len(self.window1_captions) > self.window_capacity:
+            # Move the oldest caption from Window 1 to Window 2
+            overflow_caption = self.window1_captions.pop(0)
+            self.window2_captions.append(overflow_caption)
+            
+            # If Window 2 is also full, remove oldest caption
+            if len(self.window2_captions) > self.window_capacity:
+                self.window2_captions.pop(0)
         
         self._update_text_display()
+    
+    def _calculate_window_capacity(self):
+        """Calculate how many captions can fit in one text window"""
+        column_width = self.COLUMN_WIDTH
+        char_height = self.font_size + self.CHAR_SPACING
+        
+        # Calculate how many columns can fit horizontally
+        max_columns = (self.window_width - 40) // column_width
+        
+        # Calculate how many characters can fit in each column (full height)
+        max_chars_per_column = (self.window_height - 40) // char_height
+        
+        # Estimate capacity based on average caption length
+        # Assume average caption is about 30 characters
+        avg_caption_length = 30
+        self.window_capacity = max_columns * max(1, int(avg_caption_length / 20))  # Rough estimate
         
     def _update_text_display(self):
-        """Update the text display window with vertical Chinese-style layout"""
+        """Update both text windows with vertical Chinese-style layout"""
+        # Update Window 1
+        self._update_single_window(self.window1_captions, 0)
+        
+        # Update Window 2  
+        self._update_single_window(self.window2_captions, 1)
+    
+    def _update_single_window(self, captions: List[str], window_index: int):
+        """Update a single text window with vertical Chinese-style layout"""
         # Create PIL image with black background
         pil_image = Image.new('RGB', (self.window_width, self.window_height), 'black')
         draw = ImageDraw.Draw(pil_image)
         
-        if self.captions:
+        if captions:
             # Calculate layout - 실시간으로 설정값 사용
             column_width = self.COLUMN_WIDTH
             char_height = self.font_size + self.CHAR_SPACING
@@ -149,7 +190,7 @@ class DualScreenDisplay:
             max_columns = (self.window_width - 40) // column_width
             
             # Keep only the latest captions that can fit on screen
-            visible_captions = self.captions[-max_columns:] if len(self.captions) > max_columns else self.captions
+            visible_captions = captions[-max_columns:] if len(captions) > max_columns else captions
             
             # Start from right side and work left (newest on right)
             start_x = self.window_width - 20
@@ -185,8 +226,9 @@ class DualScreenDisplay:
                 # Move to next column for next caption
                 current_column += 1
         
-        # Add footer
-        footer_text = f"Total Captions: {len(self.captions)} | Press 'q' to quit"
+        # Add footer with window info
+        window_num = window_index + 1
+        footer_text = f"Window {window_num} | Captions: {len(captions)} | Press 'q' to quit"
         draw.text(
             (20, self.window_height - 30),
             footer_text,
@@ -197,7 +239,8 @@ class DualScreenDisplay:
         # Convert PIL image back to OpenCV format
         text_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
         
-        cv2.imshow(self.text_window, text_image)
+        # Show in the specific text window
+        cv2.imshow(self.text_windows[window_index], text_image)
         
     def _wrap_text(self, text: str, max_chars_per_line: int) -> str:
         """Wrap text to fit within specified character limit (kept for compatibility)"""
@@ -231,4 +274,4 @@ class DualScreenDisplay:
     def cleanup(self):
         """Clean up windows and resources"""
         cv2.destroyAllWindows()
-        print("🖥️  Display windows closed")
+        print("🖥️  All display windows closed")

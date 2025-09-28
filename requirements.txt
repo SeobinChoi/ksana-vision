@@ -9,12 +9,15 @@ accelerate>=0.24.0
 huggingface-hub>=0.16.0
 
 # Image Processing
-opencv-python>=4.8.0
+opencv-python>=4.8.0,<5.0.0
 Pillow>=9.5.0
 
 # Utilities
-numpy>=1.21.0
+numpy>=1.21.0,<2.0.0
 protobuf>=4.0.0
 
 # Optional: For better performance
-# safetensors>=0.3.0
+safetensors>=0.3.0
+
+# Additional dependencies for the project
+typing-extensions>=4.0.0

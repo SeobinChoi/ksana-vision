@@ -39,11 +39,12 @@ class BLIPModelManager:
                 use_fast=True
             )
             
-            # Load model with appropriate settings
+            # Load model with appropriate settings and use safetensors
             self.model = BlipForConditionalGeneration.from_pretrained(
                 self.model_name,
                 device_map=self.device,
-                dtype=torch.float16 if self.device in ["mps", "cuda"] else torch.float32
+                dtype=torch.float16 if self.device in ["mps", "cuda"] else torch.float32,
+                use_safetensors=True
             )
             
             print("✅ Model loaded successfully!")
